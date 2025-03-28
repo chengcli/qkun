@@ -7,7 +7,7 @@ import cartopy.feature as cfeature
 
 from geobox import get_projection, plot_geobox, GeoBox
 
-def pace_oci_geobox(yaml_file_path):
+def oci_geobox(yaml_file_path):
     with open(yaml_file_path, "r") as f:
         oci = yaml.safe_load(f)
     lat_min = oci["geospatial_lat_min"]
@@ -18,7 +18,7 @@ def pace_oci_geobox(yaml_file_path):
     return GeoBox(latmin=lat_min, latmax=lat_max, lonmin=lon_min, lonmax=lon_max)
 
 def main(yaml_file):
-    box = pace_oci_geobox(yaml_file)
+    box = oci_geobox(yaml_file)
     print('Latitude bounds:', box.latmin, box.latmax)
     print('Longitude bounds:', box.lonmin, box.lonmax)
 
@@ -41,6 +41,6 @@ def main(yaml_file):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python plot_pace_geobox.py <input.yaml>")
+        print("Usage: python oci_plot_geobox.py <input.yaml>")
         sys.exit(1)
     main(sys.argv[1])
