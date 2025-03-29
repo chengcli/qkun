@@ -24,6 +24,7 @@ dependencies = [
   "appdirs",
   "aiohttp",
   "asyncio",
+  "pytest",
 ]
 
 [project.urls]

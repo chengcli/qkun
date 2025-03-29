@@ -1,9 +1,19 @@
 import yaml
+from pathlib import Path
 from typing import Optional, Dict
 
 class ProductCatalog:
-    def __init__(self, yaml_file: str):
-        with open(yaml_file, 'r') as f:
+    def __init__(self, yaml_path: Optional[str] = None):
+        if yaml_path:
+            path = Path(yaml_path)
+        else:
+            # Default: relative to this file's grandparent
+            path = Path(__file__).resolve().parent.parent / "products.yaml"
+
+        if not path.is_file():
+            raise FileNotFoundError(f"'products.yaml' not found at: {path}")
+
+        with open(path, 'r') as f:
             self.catalog = yaml.safe_load(f)
 
     def get_concept_id(self, mission: str, instrument: str, product_name: str) -> Optional[str]:
