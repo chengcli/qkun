@@ -4,7 +4,7 @@ from qkun.geobox import GeoBox
 from qkun.cmr.product_catalog import ProductCatalog
 from qkun.cmr.granule_search import GranuleSearch, get_granule_urls
 
-async def main(concept_id, temporal, box, page_size, max_pages):
+async def run_with(concept_id, temporal, box, page_size, max_pages):
     searcher = GranuleSearch(
         concept_id=concept_id,
         temporal=temporal,
@@ -28,7 +28,7 @@ async def main(concept_id, temporal, box, page_size, max_pages):
     #for url in get_granule_urls(granules):
     #    print(url)
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Search for NASA CMR granules.")
     parser.add_argument("mission", help="Mission name (e.g., 'pace')")
     parser.add_argument("product", help="Data product, format <instrument>-<format> (e.g., 'OCI-L1B')")
@@ -54,9 +54,12 @@ if __name__ == "__main__":
                      lonmin=args.bbox[0], lonmax=args.bbox[2])
     print(f"Geolocation Bounds: {box}")
 
-    catalog = ProductCatalog("products.yaml")
+    catalog = ProductCatalog()
     inst, prod = args.product.split('-')
     concept_id = catalog.get_concept_id(f"{args.mission}", inst, prod)
     print(f"Concept ID for {args.mission} {inst} {prod}: {concept_id}")
 
-    asyncio.run(main(concept_id, temporal, box, args.page_size, args.max_pages))
+    asyncio.run(run_with(concept_id, temporal, box, args.page_size, args.max_pages))
+
+if __name__ == "__main__":
+    main()

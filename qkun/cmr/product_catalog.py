@@ -1,14 +1,16 @@
 import yaml
 from pathlib import Path
 from typing import Optional, Dict
+from importlib.resources import files
 
 class ProductCatalog:
     def __init__(self, yaml_path: Optional[str] = None):
         if yaml_path:
             path = Path(yaml_path)
         else:
-            # Default: relative to this file's grandparent
-            path = Path(__file__).resolve().parent.parent / "products.yaml"
+            # Load products.yaml as a resource from the api package
+            print("data = ", files("qkun.cmr"))
+            path = files("qkun.cmr") / "products.yaml"
 
         if not path.is_file():
             raise FileNotFoundError(f"'products.yaml' not found at: {path}")

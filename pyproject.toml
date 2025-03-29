@@ -11,7 +11,7 @@ authors = [
 ]
 license = { text = "MIT" }
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
   "numpy",
   "pyproj",
@@ -30,3 +30,6 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/chengcli/qkun"
 Documentation = "https://github.com/chengcli/qkun"
+
+[project.scripts]
+search_granule = "qkun.api.search_granule:main"
