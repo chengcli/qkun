@@ -7,6 +7,18 @@ from typing import Tuple, List, Optional
 from ..geobox import GeoBox
 from .product_catalog import ProductCatalog
 
+def add_midnight_utc(date_str: str) -> str:
+    """
+    Takes a date string like '2025-03-28' and returns '2025-03-28T00:00:00Z'
+    """
+    if 'T' in date_str:
+        return date_str
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        return dt.strftime("%Y-%m-%dT00:00:00Z")
+    except ValueError:
+        raise ValueError("Date must be in YYYY-MM-DD format")
+
 def get_granule_urls(granules: List[dict], formats=['.hdf', '.nc']) -> List[str]:
     """Extract download URLs from granule entries"""
     urls = []
@@ -78,7 +90,7 @@ class GranuleSearch:
 
     def set_temporal_range(self, start: str, end: str):
         """Set time range in ISO 8601 format: 'YYYY-MM-DDTHH:MM:SSZ'"""
-        self.temporal = f"{start},{end}"
+        self.temporal = f"{add_midnight_utc(start)},{add_midnight_utc(end)}"
 
     def set_bounds(self, box: GeoBox):
         """Set bounding box as (W, S, E, N)"""

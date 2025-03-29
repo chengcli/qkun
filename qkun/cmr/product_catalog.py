@@ -9,7 +9,6 @@ class ProductCatalog:
             path = Path(yaml_path)
         else:
             # Load products.yaml as a resource from the api package
-            print("data = ", files("qkun.cmr"))
             path = files("qkun.cmr") / "products.yaml"
 
         if not path.is_file():
