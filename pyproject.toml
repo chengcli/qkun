@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qkun"
-version = "0.1.0"
+version = "0.2.1"
 description = "Tools for Satellite observation"
 authors = [
   { name="Cheng Li", email="chengcli@umich.edu" }
