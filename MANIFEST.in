@@ -1,1 +1,2 @@
 recursive-include examples *
+include qkun/cmr/*.yaml
