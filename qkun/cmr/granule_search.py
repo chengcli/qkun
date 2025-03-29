@@ -66,7 +66,7 @@ def validate_concept_id(concept_id: str):
     response = requests.get(url)
     return response.status_code == 200
 
-class GranuleSearch:
+class GranuleSearcher:
     BASE_URL = "https://cmr.earthdata.nasa.gov/search/granules.json"
 
     def __init__(self, concept_id: str, temporal: Optional[str] = None,

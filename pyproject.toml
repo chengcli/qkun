@@ -23,7 +23,9 @@ dependencies = [
   "pyyaml",
   "appdirs",
   "aiohttp",
+  "aiofiles",
   "pytest",
+  "tqdm",
 ]
 
 [project.urls]

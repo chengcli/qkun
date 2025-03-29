@@ -2,10 +2,10 @@ import argparse
 import asyncio
 from qkun.geobox import GeoBox
 from qkun.cmr.product_catalog import ProductCatalog
-from qkun.cmr.granule_search import GranuleSearch, get_granule_urls, add_midnight_utc
+from qkun.cmr.granule_search import GranuleSearcher, get_granule_urls, add_midnight_utc
 
 async def run_with(concept_id, temporal, box, page_size, max_pages):
-    searcher = GranuleSearch(
+    searcher = GranuleSearcher(
         concept_id=concept_id,
         temporal=temporal,
         bounds=box,

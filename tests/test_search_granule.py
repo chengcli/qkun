@@ -1,7 +1,10 @@
 import unittest
 import subprocess
 import sys
+import os
+import asyncio
 from pathlib import Path
+from qkun.cmr.granule_download import GranuleDownloader
 
 class TestCMRGranuleCLI(unittest.TestCase):
     def setUp(self):
@@ -30,6 +33,19 @@ class TestCMRGranuleCLI(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertIn("granule", result.stdout.lower() or "found" in result.stdout.lower())
+
+    def test_download(self):
+        """Check that CLI can download files"""
+        result = subprocess.run(self.base_args, capture_output=True, text=True)
+        downloader = GranuleDownloader(username=os.environ["QKUN_USER"],
+                                       password=os.environ["QKUN_PASS"])
+        result = result.stdout.split("\n")
+        nc_files = []
+        for i in range(len(result)):
+            if ".nc" in result[i]:
+                nc_files.append(result[i])
+
+        asyncio.run(downloader.download(nc_files[0]))
 
 
 if __name__ == "__main__":
