@@ -15,6 +15,10 @@ class GeoBox:
         self.lonmax = lonmax
         self.angle = angle
 
+    def __repr__(self):
+        return (f"GeoBox(latmin={self.latmin}, latmax={self.latmax}, "
+                f"lonmin={self.lonmin}, lonmax={self.lonmax}, angle={self.angle})")
+
 def add_geobox(ax, box, crs):
     lats = [box.latmax, box.latmax, box.latmin, box.latmin, box.latmax]
 

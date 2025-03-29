@@ -20,7 +20,10 @@ dependencies = [
   "shapely",
   "scipy",
   "netCDF4",
-  "pyyaml"
+  "pyyaml",
+  "appdirs",
+  "aiohttp",
+  "asyncio",
 ]
 
 [project.urls]

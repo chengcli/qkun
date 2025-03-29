@@ -1,0 +1,9 @@
+pace:
+  OCI:
+    - name: L1B
+      concept-id: C3392966952-OB_CLOUD
+      description: |
+        Level 1B products are the standard output of the PACE mission's
+        Ocean Color Instrument (OCI). They include radiance and reflectance
+        data that are essential for ocean color studies.
+      formats: [nc]
