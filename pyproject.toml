@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qkun"
-version = "0.2.5"
+version = "0.3.0"
 description = "Tools for Satellite observation"
 authors = [
   { name="Cheng Li", email="chengcli@umich.edu" }
 ]
-license = { text = "MIT" }
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -26,6 +26,7 @@ dependencies = [
   "aiofiles",
   "pytest",
   "tqdm",
+  "requests",
 ]
 
 [project.urls]
@@ -33,4 +34,5 @@ Homepage = "https://github.com/chengcli/qkun"
 Documentation = "https://github.com/chengcli/qkun"
 
 [project.scripts]
-search_granule = "qkun.api.search_granule:main"
+search-granule = "qkun.api.search_granule:main"
+download-granule = "qkun.api.download_granule:main"

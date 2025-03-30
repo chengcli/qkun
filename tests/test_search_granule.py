@@ -47,6 +47,9 @@ class TestCMRGranuleCLI(unittest.TestCase):
 
         asyncio.run(downloader.download(nc_files[0]))
 
+        #urls = ["...", "...", "..."]
+        #await asyncio.gather(*(downloader.download(u) for u in urls))
+
 
 if __name__ == "__main__":
     unittest.main()
