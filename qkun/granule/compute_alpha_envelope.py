@@ -30,7 +30,8 @@ def alpha_shape_2d(points, alpha=0.05):
     poly = unary_union(polygonize(mls))
     return poly
 
-def compute_alpha_envelope(npz_path, alpha=0.05, max_points=10000):
+def compute_alpha_envelope(npz_path: str, 
+                           alpha=0.05, max_points=10000, verbose=True):
     """Compute an alpha shape envelope in local Cartesian coordinates centered at mean lat/lon."""
     data = np.load(npz_path)
     lat = data["latitude"]
@@ -71,10 +72,13 @@ def compute_alpha_envelope(npz_path, alpha=0.05, max_points=10000):
 
     # Compute alpha shape or convex hull
     if alpha == 0: # convex hull
-        print("Computing convex hull...")
+        if verbose:
+            print("Computing convex hull...")
         poly = ConvexHull(points_xy)
         envelope_xy = points_xy[poly.vertices]
     else:   # alpha shape
+        if verbose:
+            print(f"Computing alpha shape with alpha = {alpha:.2f}...")
         poly = alpha_shape_2d(points_xy, alpha=alpha)
         if isinstance(poly, Polygon):
             envelope_xy = np.array(poly.exterior.coords)
@@ -100,17 +104,14 @@ def compute_alpha_envelope(npz_path, alpha=0.05, max_points=10000):
     lon_env, lat_env = transformer_to_latlon.transform(envelope_xy[:, 0], envelope_xy[:, 1])
 
     # output path
-    basename = os.path.basename(npz_path)
-    outname = f"{os.path.splitext(basename)[0]}_alpha={alpha:.2f}.txt"
+    path, basename = os.path.split(npz_path)
+    basename = os.path.splitext(basename)[0]
+    output_file = os.path.join(path,
+        f"{os.path.splitext(basename)[0]}.fov_alpha={alpha:.2f}.txt")
 
     # Save to .txt file as: lon lat
     envelope_coords = np.column_stack((lon_env, lat_env))
-    np.savetxt(outname, envelope_coords, fmt="%.6f", delimiter=" ")
-    print(f"Envelope written to: {outname} (lon lat format)")
-    return envelope_coords[:, 1], envelope_coords[:, 0]
-
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python compute_alpha_envelope.py <latlon.npz>")
-        sys.exit(1)
-    compute_alpha_envelope(sys.argv[1], alpha = 0.)
+    np.savetxt(output_file, envelope_coords, fmt="%.6f", delimiter=" ")
+    if verbose:
+        print(f"Envelope (lon lat format) written to: {output_file}")
+    return output_file

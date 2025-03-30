@@ -23,13 +23,15 @@ async def run_with(file_path, selector, save_dir,
 
     selected_urls = []
     selected_indices = parse_selection(selector, n)
-    print("selected_indices = ", selected_indices)
     for url in urls:
         selected_urls.extend([urls[i] for i in selected_indices])
 
-    # Remove duplicates and preserve order
+    # remove duplicates and preserve order
     selected_urls = list(dict.fromkeys(selected_urls))
-    print("selected_urls = ", selected_urls)
+    if verbose:
+        print("selected_urls = ")
+        for url in selected_urls:
+            print(url)
 
     await asyncio.gather(*(downloader.download(url) for url in selected_urls))
 
