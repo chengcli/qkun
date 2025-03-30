@@ -1,6 +1,0 @@
-!!python/object:qkun.pace.ocean_color.OceanColor
-basename: PACE_OCI.20250326T103301.L1B.V3
-longname: Ocean Color Instrument
-name: oci
-prefix: /Users/chengcli/.cache/qkun
-verbose: true
