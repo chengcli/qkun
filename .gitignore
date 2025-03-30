@@ -4,3 +4,4 @@ qkun.egg-info/
 
 # example
 examples/*.yaml
+examples/*.txt
