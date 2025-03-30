@@ -1,4 +1,6 @@
 # 🌍 QKUN
+[![build](https://github.com/chengcli/qkun/actions/workflows/main.yml/badge.svg)](https://github.com/chengcli/qkun/actions/workflows/main.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue)](https://img.shields.io/badge/license-MIT-blue)
 
 **Geoinformation Tools & Data Access for Satellite Observations**
 
@@ -17,10 +19,11 @@
 
 ## 📦 Installation
 
-### 🐍 System Requirements
+### 🧪 System Requirements:
 - Python 3.9+
 - Linux or macOS
 - hdf5, netCDF, and other data format libraries
+- use python virtual environment for isolation
 
 If you are using `MacOS`, you may need to install `hdf5` and `netCDF` libraries:
 ```bash
@@ -35,6 +38,12 @@ sudo apt-get install libhdf5-dev libnetcdf-dev
 If you are using `RedHat`, you may need to install `hdf5` and `netCDF` libraries:
 ```bash
 sudo yum install hdf5 netcdf
+```
+
+Please activate a python virtual environment before installing the package:
+```bash
+python3 -m venv venv
+source venv/bin/activate
 ```
 
 ### 🔗 Install from PyPI:
@@ -82,34 +91,6 @@ digest-granule download_list.txt --select ::2 --save-dir ${HOME}/.cache/qkun
 
 ---
 
-🧹 Caching
-By default, all downloaded data are cached locally in:
-```bash
-~/.cache/qkun/
-```
-
-To change the cache directory and size limit, set these global variables:
-```bash
-import qkun
-qkun.CACHE_FOLDER_PATH = '/path/to/cache'
-qkun.CACHE_SIZE_LIMIT = 10.  # in GB
-```
-
----
-
-## 🤝 Contributing
-Contributions are welcome!
-Please open an issue or PR if you’d like to:
-- Add new missions/instruments
-- Improve download or parsing logic
-- Enhance command line tools or add GUI
-- Expand test coverage
-
----
-
-## 📬 Contact
-Maintained by @chengcli — feel free to reach out with ideas, feedback, or collaboration proposals.
-
 ## 🧠 Example Python API Usage
 Assuming that you have already downloaded and digested the data using command-line tools, you can use the following Python API to access the data.
 
@@ -140,3 +121,34 @@ keys = obs.get_data().variables.keys()
 # subsample and average over bands
 blue = obs.get_data("rhot_blue")[:,::5,::5].mean(axis=0)
 ```
+
+---
+
+🧹 Caching
+By default, all downloaded data are cached locally in:
+```bash
+~/.cache/qkun/
+```
+
+To change the cache directory and size limit, set these global variables:
+```bash
+import qkun
+qkun.CACHE_FOLDER_PATH = '/path/to/cache'
+qkun.CACHE_SIZE_LIMIT = 10.  # in GB
+```
+
+---
+
+## 🤝 Contributing
+Contributions are welcome!
+Please open an issue or PR if you’d like to:
+- Add new missions/instruments
+- Improve download or parsing logic
+- Enhance command line tools or add GUI
+- Expand test coverage
+
+---
+
+## 📬 Contact
+Maintained by @chengcli — feel free to reach out with ideas, feedback, or collaboration proposals.
+

@@ -31,8 +31,10 @@ def main():
     help="Start datetime in ISO format, time can be omitted (e.g., 2025-03-28T00:00:00Z, 2025-03-28)")
     parser.add_argument("--end",
     help="End datetime in ISO format, time can be omitted (e.g., 2025-03-28T23:59:59Z, 2025-03-28)")
-    parser.add_argument("--bbox", nargs=4, type=float, metavar=('W', 'S', 'E', 'N'),
-                        help="Bounding box as west south east north, (e.g., -10 30 10 50)")
+    parser.add_argument("--lat", nargs=2, type=float, metavar=('S', 'N'),
+                        help="Bounding box as south north, (e.g., 30 50)")
+    parser.add_argument("--lon", nargs=2, type=float, metavar=('W', 'E'),
+                        help="Bounding box as west east, (e.g., -10 10)")
     parser.add_argument("--page-size", type=int, default=100,
                         help="Number of results per page, default 100")
     parser.add_argument("--max-pages", type=int, default=10,
@@ -49,9 +51,9 @@ def main():
         print(f"Temporal range: {temporal}")
 
     box = GeoBox(latmin=-90., latmax=90., lonmin=0., lonmax=360.)
-    if args.bbox:
-        box = GeoBox(latmin=args.bbox[1], latmax=args.bbox[3],
-                     lonmin=args.bbox[0], lonmax=args.bbox[2])
+    if args.lat and args.lon:
+        box = GeoBox(latmin=args.lat[0], latmax=args.lat[1],
+                     lonmin=args.lon[0], lonmax=args.lon[1])
 
     if not args.quiet:
         print(f"Geolocation Bounds: {box}")
