@@ -32,11 +32,12 @@ def run_with(file_path, selector, save_dir, verbose=True):
         attrs = parse_nc_global_attributes(nc_path)
 
         # append data url
-        attrs["data_url"] = url
+        attrs["url_path"] = url
+        attrs["data_path"] = nc_path.as_posix()
         save_to_yaml(attrs, yaml_path)
 
-    if verbose:
-        print(f"YAML digest saved to: {yaml_path}")
+        if verbose:
+            print(f"YAML digest saved to: {yaml_path}")
 
 def main():
     parser = argparse.ArgumentParser(

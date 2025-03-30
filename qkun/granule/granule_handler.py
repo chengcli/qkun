@@ -1,32 +1,39 @@
+import yaml
 import os
 
+def class_representer(dumper, data):
+    return dumper.represent_mapping(f'!{data.__class__.__name__}', data.__dict__)
+
 class GranuleHandler:
+    DIGEST_SUFFIX = "global.yaml"
+    FOOTPRINT_SUFFIX = "footprint.npz"
+
     def __init__(self, name, longname, verbose=False):
-        self.instrument_name = name
-        self.instrument_longname = longname
+        self.name = name
+        self.longname = longname
         self.verbose = verbose
         self.prefix = None
-        self.url_path = None
-        self.digest_path = None
-        self.footprint_path = None
-        self.fov_path = None
-        self.data_path = None
+        self.basename = None
 
     def __repr__(self):
         result = f"Instrument({self.name}, {self.longname})"
         if self.prefix:
             result += f"\nPrefix: {self.prefix}"
-        if self.url_path:
-            result += f"\nData URL: {self.url_path}"
-        if self.digest_path:
-            result += f"\nDigest: {self.digest_path}"
-        if self.footprint_path:
-            result += f"\nFootprint: {self.footprint_path}"
-        if self.fov_path:
-            result += f"\nFOV: {self.fov_path}"
-        if self.data_path:
-            result += f"\nData: {self.data_path}"
+        if self.basename:
+            digest = f"{self.basename}.{self.DIGEST_SUFFIX}"
+            result += f"\nDigest: {digest}, exists = {os.path.exists(self.digest_path())}"
+            footprint = f"{self.basename}.{self.FOOTPRINT_SUFFIX}"
+            result += f"\nFootprint: {footprint}, exists = {os.path.exists(self.footprint_path())}"
         return result
+    
+    def digest_path(self):
+        return os.path.join(self.prefix, f"{self.basename}.{self.DIGEST_SUFFIX}")
+
+    def footprint_path(self):
+        return os.path.join(self.prefix, f"{self.basename}.{self.FOOTPRINT_SUFFIX}")
+
+    def fov_path(self, alpha: float=0.0):
+        return os.path.join(self.prefix, f"{self.basename}.fov_alpha={alpha:.2f}.txt")
 
     def process(self):
         raise NotImplementedError

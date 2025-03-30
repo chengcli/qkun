@@ -1,18 +1,19 @@
+import yaml
 import numpy as np
-import sys
 import os
 from typing import Tuple
 from netCDF4 import Dataset
-from pathlib import Path
-from append_resolution import append_resolution_to_yaml
-from compute_alpha_envelope import compute_alpha_envelope
-from ..granule_handler import GranuleHandler
+from ..granule.append_resolution import append_resolution_to_yaml
+from ..granule.compute_alpha_envelope import compute_alpha_envelope
+from ..granule.granule_handler import GranuleHandler
 from ..geobox import GeoBox
 
-def process_footprint(prefix: str, nc_path: str, yaml_file: str=None, verbose: bool=True) -> Tuple[np.ndarray, np.ndarray]:
+def process_footprint(nc_path: str, yaml_file: str=None, verbose: bool=True) -> Tuple[np.ndarray, np.ndarray]:
     """Extracts latitude and longitude from 'geolocation_data' group and caches to .npz file."""
 
-    output_file = f'{CACHE_FOLDER_PATH}/{perfix}.footprint.npz'
+    path, basename = os.path.split(nc_path)
+    output_file = os.path.join(path, f"{os.path.splitext(basename)[0]}.footprint.npz")
+
     ds = Dataset(nc_path, mode="r")
 
     if "geolocation_data" not in ds.groups:
@@ -47,23 +48,44 @@ def process_footprint(prefix: str, nc_path: str, yaml_file: str=None, verbose: b
 class OceanColor(GranuleHandler):
     def __init__(self, digest_path, verbose: bool=False):
         super().__init__("oci", "Ocean Color Instrument", verbose=verbose)
-        basename = os.path.basename(digest_path)
-        self.prefix = os.path.splitext(basename)[0]
-        self.digest_path = digest_path
+        path, basename = os.path.split(digest_path)
+        self.prefix = path
+        self.basename = os.path.splitext(os.path.splitext(basename)[0])[0]
 
     def process(self, alpha: float=0.0, max_points: int=1000):
-        self.footprint_path = process_footprint(
-                self.prefix, nc_file, self.digest_path, self.verbose)
-        self.fov_path = compute_alpha_envelope(
-                self.footprint_path, alpha, max_points, self.verbose)
+        digest_path = f"{os.path.join(self.prefix, self.basename)}.global.yaml"
+        with open(digest_path, "r") as f:
+            digest = yaml.safe_load(f)
 
-    def get_fov(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Field of view points"""
-        data = np.genfromtxt(self.fov_path)
+        if not os.path.exists(self.footprint_path()):
+            footprint_path = process_footprint(
+                    digest["data_path"], digest_path, self.verbose)
+        else:
+            footprint_path = self.footprint_path()
+
+        if not os.path.exists(self.fov_path(alpha)): 
+            fov_path = compute_alpha_envelope(
+                    footprint_path, alpha, max_points, self.verbose)
+        else:
+            fov_path = self.fov_path(alpha)
+
+        if self.verbose:
+            print(f"Processing done: {self.basename}")
+
+    def get_fov(self, alpha: float=0.0) -> Tuple[np.ndarray, np.ndarray]:
+        if not os.path.exists(self.fov_path(alpha)):
+            raise ValueError(f"File not found: {self.fov_path(alpha)}")
+
+        fov_path = self.fov_path(alpha)
+        data = np.genfromtxt(fov_path)
         return data[:, 0], data[:, 1]
 
     def get_bounding_box(self) -> GeoBox:
-        with open(self.digest, "r") as f:
+        if not os.path.exists(self.digest_path()):
+            raise ValueError(f"File not found: {self.digest_path()}")
+
+        digest_path = self.digest_path()
+        with open(digest_path, "r") as f:
             digest = yaml.safe_load(f)
         lat_min = digest["geospatial_lat_min"]
         lat_max = digest["geospatial_lat_max"]
@@ -73,7 +95,11 @@ class OceanColor(GranuleHandler):
         return GeoBox(latmin=lat_min, latmax=lat_max, lonmin=lon_min, lonmax=lon_max)
 
     def get_footprint(self) -> Tuple[np.ndarray, np.ndarray]:
-        data = np.load(self.footprint_path)
+        if not os.path.exists(self.footprint_path()):
+            raise ValueError(f"File not found: {self.footprint_path()}")
+
+        footprint_path = self.footprint_path()
+        data = np.load(footprint_path)
         return data["longitude"], data["latitude"]
 
     def get_data(self) -> dict:

@@ -30,7 +30,7 @@ def alpha_shape_2d(points, alpha=0.05):
     poly = unary_union(polygonize(mls))
     return poly
 
-def compute_alpha_envelope(prefix: str, npz_path: str, 
+def compute_alpha_envelope(npz_path: str, 
                            alpha=0.05, max_points=10000, verbose=True):
     """Compute an alpha shape envelope in local Cartesian coordinates centered at mean lat/lon."""
     data = np.load(npz_path)
@@ -104,11 +104,14 @@ def compute_alpha_envelope(prefix: str, npz_path: str,
     lon_env, lat_env = transformer_to_latlon.transform(envelope_xy[:, 0], envelope_xy[:, 1])
 
     # output path
-    outname = f"{prefix}.fov_alpha={alpha:.2f}.txt"
+    path, basename = os.path.split(npz_path)
+    basename = os.path.splitext(basename)[0]
+    output_file = os.path.join(path,
+        f"{os.path.splitext(basename)[0]}.fov_alpha={alpha:.2f}.txt")
 
     # Save to .txt file as: lon lat
     envelope_coords = np.column_stack((lon_env, lat_env))
-    np.savetxt(outname, envelope_coords, fmt="%.6f", delimiter=" ")
+    np.savetxt(output_file, envelope_coords, fmt="%.6f", delimiter=" ")
     if verbose:
-        print(f"Envelope written to: {outname} (lon lat format)")
-    return outname
+        print(f"Envelope (lon lat format) written to: {output_file}")
+    return output_file
