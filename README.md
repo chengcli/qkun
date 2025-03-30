@@ -48,13 +48,13 @@ source venv/bin/activate
 
 ### 🔗 Install from PyPI:
 ```bash
-pip install pacegeo
+pip install qkun 
 ```
 
 ### 🛠️ Install locally (dev mode)
 ```bash
-git clone https://github.com/yourusername/pacegeo.git
-cd pacegeo
+git clone https://github.com/yourusername/qkun.git
+cd qkun
 pip install -e .
 ```
 
