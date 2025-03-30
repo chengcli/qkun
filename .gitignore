@@ -1,3 +1,6 @@
 # dist
 dist/
 qkun.egg-info/
+
+# example
+examples/*.yaml

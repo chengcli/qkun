@@ -1,5 +1,4 @@
 import cartopy.crs as ccrs
-import cartopy.feature as cfeature
 
 class GeoBox:
     latmin: float
@@ -19,7 +18,7 @@ class GeoBox:
         return (f"GeoBox(latmin={self.latmin}, latmax={self.latmax}, "
                 f"lonmin={self.lonmin}, lonmax={self.lonmax}, angle={self.angle})")
 
-def add_geobox(ax, box, crs):
+def add_geobox(ax, box, crs=ccrs.PlateCarree(), **kwargs):
     lats = [box.latmax, box.latmax, box.latmin, box.latmin, box.latmax]
 
     # Detect wrap-around
@@ -50,19 +49,3 @@ def get_projection(box):
         extent = box
 
     return projection, extent
-
-def plot_geobox(ax, box, extent=None):
-    ax.add_feature(cfeature.LAND)
-    ax.add_feature(cfeature.OCEAN)
-    ax.add_feature(cfeature.COASTLINE)
-    ax.add_feature(cfeature.BORDERS, linestyle=':')
-    ax.add_feature(cfeature.LAKES, alpha=0.5)
-    ax.add_feature(cfeature.RIVERS)
-    ax.gridlines(draw_labels=True)
-
-    if extent is None:
-        extent = box
-
-    ax.set_extent([extent.lonmin, extent.lonmax, 
-                   extent.latmin, extent.latmax], crs=ccrs.PlateCarree())
-    add_geobox(ax, box, crs=ccrs.PlateCarree())
