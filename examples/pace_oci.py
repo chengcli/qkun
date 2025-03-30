@@ -49,6 +49,16 @@ box = obs2.get_bounding_box()
 print('Latitude bounds:', box.latmin, box.latmax)
 print('Longitude bounds:', box.lonmin, box.lonmax)
 
+# print data keys
+print(obs2.get_data().variables.keys())
+
+# print blue channel data shape
+print(obs2.get_data("rhot_blue").shape)
+
+# subsample and average over bands
+blue = obs2.get_data("rhot_blue")[:,::5,::5].mean(axis=0)
+print(blue.shape)
+
 # Get the projection and extent based on the latitude and longitude bounds
 projection, extent = get_projection(box)
 
@@ -60,6 +70,14 @@ plot_geobox(ax, box, extent=extent)
 lon, lat = obs2.get_fov()
 ax.plot(lon, lat, color='blue', linewidth=1,
         transform=ccrs.Geodetic(), label="FOV")
+
+# get footprint locations
+lon, lat = obs2.get_footprint()
+lon = lon[::5, ::5]
+lat = lat[::5, ::5]
+print(lon.shape, lat.shape)
+
+plt.pcolormesh(lon, lat, blue, shading="auto", cmap="viridis")
 
 plt.legend()
 plt.tight_layout()

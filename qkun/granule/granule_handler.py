@@ -7,6 +7,8 @@ def class_representer(dumper, data):
 class GranuleHandler:
     DIGEST_SUFFIX = "global.yaml"
     FOOTPRINT_SUFFIX = "footprint.npz"
+    USERNAME = os.environ["QKUN_USER"]
+    PASSWORD = os.environ["QKUN_PASS"]
 
     def __init__(self, name, longname, verbose=False):
         self.name = name
