@@ -36,3 +36,4 @@ Documentation = "https://github.com/chengcli/qkun"
 [project.scripts]
 search-granule = "qkun.api.search_granule:main"
 download-granule = "qkun.api.download_granule:main"
+digest-granule = "qkun.api.digest_granule:main"
