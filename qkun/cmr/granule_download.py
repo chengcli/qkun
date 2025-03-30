@@ -35,7 +35,7 @@ def get_lru_files(path):
 
 class GranuleDownloader:
     def __init__(self, username: str, password: str, save_dir: str = ".",
-                verbose: bool = True, max_cache_size: float = 5.0):
+                verbose: bool = True, max_cache_size: float = 10.0):
         self.auth = BasicAuth(username, password)
         self.save_dir = Path(save_dir).resolve()
         self.save_dir.mkdir(parents=True, exist_ok=True)
