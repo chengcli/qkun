@@ -1,38 +1,26 @@
 import argparse
 import asyncio
 import re
+from itertools import chain
+from typing import List, Optional
 from datetime import datetime, timezone
 from qkun.geobox import GeoBox
 from qkun.cmr.product_catalog import ProductCatalog
-from qkun.cmr.granule_search import GranuleSearcher, get_granule_urls, add_midnight_utc
+from qkun.cmr.granule_search import (
+        GranuleSearcher,
+        get_granule_urls,
+        add_midnight_utc
+        )
 
-def validate_time_after(start: str, inp: str):
-    """Validate that inp is a time after start"""
-    iso_format = "%Y-%m-%dT%H:%M:%SZ"
-    pattern = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+def find_earliest_date(dates):
+    if not dates:
+        return None
+    return min(dates) if not None in dates else None
 
-    if not pattern.fullmatch(inp):
-        raise ValueError("Time must be in ISO 8601 UTC format: YYYY-MM-DDTHH:MM:SSZ")
-
-    inp_dt = datetime.strptime(inp, iso_format).replace(tzinfo=timezone.utc)
-    start_dt = datetime.strptime(start, iso_format).replace(tzinfo=timezone.utc)
-
-    if inp_dt <= start_dt:
-        raise ValueError(f"Time must be later than start time: {start}")
-
-def validate_time_before(end: str, inp: str):
-    """Validate that inp is a time before end"""
-    iso_format = "%Y-%m-%dT%H:%M:%SZ"
-    pattern = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
-
-    if not pattern.fullmatch(inp):
-        raise ValueError("Time must be in ISO 8601 UTC format: YYYY-MM-DDTHH:MM:SSZ")
-
-    inp_dt = datetime.strptime(inp, iso_format).replace(tzinfo=timezone.utc)
-    end_dt = datetime.strptime(end, iso_format).replace(tzinfo=timezone.utc)
-
-    if inp_dt >= end_dt:
-        raise ValueError(f"Time must be earlier than end time: {end}")
+def find_latest_date(dates):
+    if not dates:
+        return None
+    return max(dates) if not None in dates else None
 
 def augment_with_cases(strings):
     seen = set()
@@ -67,16 +55,14 @@ async def run_with(concept_id, temporal, box, formats,
 
 def main():
     parser = argparse.ArgumentParser(description="Search for NASA CMR granules.")
-    parser.add_argument("mission", help="Mission name (e.g., 'pace')")
-    parser.add_argument("product", help="Data product, format <instrument>-<format> (e.g., 'OCI-L1B')")
-    parser.add_argument("--start", 
-    help="Start datetime in ISO format, time can be omitted (e.g., 2025-03-28T00:00:00Z, 2025-03-28)")
-    parser.add_argument("--end",
-    help="End datetime in ISO format, time can be omitted (e.g., 2025-03-28T23:59:59Z, 2025-03-28)")
+    parser.add_argument("mission", help="Lower case mission name (e.g., 'pace')")
+    parser.add_argument("product", help="Data product, format <instrument>-<level> (e.g., 'OCI-L1B')")
+    parser.add_argument("--start", help="Start date in ISO format (e.g., 2025-03-28)")
+    parser.add_argument("--end", help="End date in ISO format (e.g., 2025-03-28)")
     parser.add_argument("--lat", nargs=2, type=float, metavar=('S', 'N'),
-                        help="Bounding box as south north, (e.g., 30 50)")
+                        default=[-90., 90.], help="Bounding box as south north, (e.g., 30 50)")
     parser.add_argument("--lon", nargs=2, type=float, metavar=('W', 'E'),
-                        help="Bounding box as west east, (e.g., -10 10)")
+                        default=[-180., 180.], help="Bounding box as west east, (e.g., -10 10)")
     parser.add_argument("--page-size", type=int, default=100,
                         help="Number of results per page, default 100")
     parser.add_argument("--max-pages", type=int, default=10,
@@ -96,45 +82,48 @@ def main():
     if not args.quiet:
         print(f"Geolocation Bounds: {box}")
 
-    #### Product validation ####
-
+    #### Time validation ####
     catalog = ProductCatalog()
     inst, prod = args.product.split('-')
-    concept_id = catalog.get_concept_id(f"{args.mission}", inst, prod)
+
+    meta = catalog.get_products_metadata(f"{args.mission}", inst, prod)
+    iso_format = "%Y-%m-%d"
+    if args.start:
+        start_dt = datetime.strptime(args.start, iso_format).date()
+        if find_earliest_date(meta.get("start-date")):
+            if start_dt < find_earliest_date(meta["start-date"]):
+                raise ValueError("Start time must be later than the earliest start time")
+    else:
+        start_dt = find_earliest_date(meta.get("start-date"))
+
+    if args.end:
+        end_dt = datetime.strptime(args.end, iso_format).date()
+        if find_latest_date(meta.get("end-date")):
+            if end_dt > find_latest_date(meta["end-date"]):
+                raise ValueError("End time must be earlier than the latest end time")
+    else:
+        end_dt = find_latest_date(meta.get("end-date"))
+
+    temporal = None
+    if start_dt and end_dt:
+        temporal = f"{start_dt.strftime(iso_format)},{end_dt.strftime(iso_format)}"
+    if not args.quiet:
+        print(f"Temporal range: {temporal}")
+
+    #### Product validation ####
+    concept_id = catalog.get_concept_id(f"{args.mission}", inst, prod,
+                                        temporal=temporal)
+    if not concept_id:
+        raise ValueError(f"Could not find concept ID for {args.mission} {inst} {prod}")
 
     if not args.quiet:
         print(f"Concept ID for {args.mission} {inst} {prod}: {concept_id}")
 
-    #### Time validation ####
-
-    meta = catalog.get_product_metadata(f"{args.mission}", inst, prod)
-    if args.start:
-        args.start = add_midnight_utc(args.start)
-        if "start-date" in meta:
-            validate_time_after(add_midnight_utc(
-                meta["start-date"].strftime("%Y-%m-%d")), args.start)
-    else:
-        if "start-date" in meta:
-            args.start = add_midnight_utc(meta["start-date"])
-
-    if args.end:
-        args.end = add_midnight_utc(args.end)
-        if "end-date" in meta:
-            validate_time_before(add_midnight_utc(
-                meta["end-date"].strftime("%Y-%m-%d")), args.end)
-    else:
-        if "end-date" in meta:
-            args.end = add_midnight_utc(meta["end-date"])
-
-    temporal = None
-    if args.start and args.end:
-        temporal = f"{args.start},{args.end}"
-    if not args.quiet:
-        print(f"Temporal range: {temporal}")
-
     #### Async run ####
 
-    asyncio.run(run_with(concept_id, temporal, box, meta["formats"],
+    temporal = ','.join([add_midnight_utc(t) for t in temporal.split(',')])
+    asyncio.run(run_with(concept_id, temporal, box, 
+                         list(chain.from_iterable(meta["formats"])),
                          args.page_size, args.max_pages,
                          verbose=not args.quiet))
 

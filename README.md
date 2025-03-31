@@ -81,11 +81,12 @@ digest-granule download_list.txt --select ::2 --save-dir ${HOME}/.cache/qkun
 ---
 
 ## 🛰️ Supported Missions, Instruments & Data Levels
-| Mission        | Instrument(s)   | Data Level(s) |
+| Mission        | Instrument(s)    | Data Level(s)  |
 |----------------|------------------|----------------|
-| **PACE**       | OCI              | L1B, L2        |
-| **Aqua**       | AIRS,MODIS       | L1B, L2        |
-| **GPM**        | GMI              | L1B, L2        |
+| **pace**       | OCI              | L1B, L2        |
+| **aqua**       | AIRS,MODIS       | L1B, L2        |
+| **gpm**        | GMI              | L1B, L2        |
+| **sentinel-5p**| TROPOMI          | L1B, L2        |
 | *(More coming)*| ...              | ...            |
 
 ---

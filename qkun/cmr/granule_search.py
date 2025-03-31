@@ -76,6 +76,9 @@ class GranuleSearcher:
         validate_concept_id(concept_id)
         self.concept_id = concept_id
 
+        if not ',' in temporal:
+            raise ValueError("Temporal range must be comma-separated: start,end")
+
         validate_temporal(*temporal.split(','))
         self.temporal = temporal
 
