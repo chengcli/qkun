@@ -1,10 +1,51 @@
 import argparse
 import asyncio
+import re
+from datetime import datetime, timezone
 from qkun.geobox import GeoBox
 from qkun.cmr.product_catalog import ProductCatalog
 from qkun.cmr.granule_search import GranuleSearcher, get_granule_urls, add_midnight_utc
 
-async def run_with(concept_id, temporal, box, page_size, max_pages, verbose=True):
+def validate_time_after(start: str, inp: str):
+    """Validate that inp is a time after start"""
+    iso_format = "%Y-%m-%dT%H:%M:%SZ"
+    pattern = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
+    if not pattern.fullmatch(inp):
+        raise ValueError("Time must be in ISO 8601 UTC format: YYYY-MM-DDTHH:MM:SSZ")
+
+    inp_dt = datetime.strptime(inp, iso_format).replace(tzinfo=timezone.utc)
+    start_dt = datetime.strptime(start, iso_format).replace(tzinfo=timezone.utc)
+
+    if inp_dt <= start_dt:
+        raise ValueError(f"Time must be later than start time: {start}")
+
+def validate_time_before(end: str, inp: str):
+    """Validate that inp is a time before end"""
+    iso_format = "%Y-%m-%dT%H:%M:%SZ"
+    pattern = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
+    if not pattern.fullmatch(inp):
+        raise ValueError("Time must be in ISO 8601 UTC format: YYYY-MM-DDTHH:MM:SSZ")
+
+    inp_dt = datetime.strptime(inp, iso_format).replace(tzinfo=timezone.utc)
+    end_dt = datetime.strptime(end, iso_format).replace(tzinfo=timezone.utc)
+
+    if inp_dt >= end_dt:
+        raise ValueError(f"Time must be earlier than end time: {end}")
+
+def augment_with_cases(strings):
+    seen = set()
+    augmented = []
+    for s in strings:
+        for variant in (s, s.upper(), s.lower()):
+            if variant not in seen:
+                seen.add(variant)
+                augmented.append(variant)
+    return augmented
+
+async def run_with(concept_id, temporal, box, formats,
+                   page_size, max_pages, verbose=True):
     searcher = GranuleSearcher(
         concept_id=concept_id,
         temporal=temporal,
@@ -20,7 +61,8 @@ async def run_with(concept_id, temporal, box, page_size, max_pages, verbose=True
     async for granule_page in searcher.stream():
         if verbose:
             print(f"Got page with {len(granule_page)} granules")
-        for url in get_granule_urls(granule_page):
+        for url in get_granule_urls(granule_page, 
+                                    augment_with_cases(formats)):
             print(url)
 
 def main():
@@ -44,11 +86,7 @@ def main():
 
     args = parser.parse_args()
 
-    temporal = None
-    if args.start and args.end:
-        temporal = f"{add_midnight_utc(args.start)},{add_midnight_utc(args.end)}"
-    if not args.quiet:
-        print(f"Temporal range: {temporal}")
+    #### Location validation ####
 
     box = GeoBox(latmin=-90., latmax=90., lonmin=0., lonmax=360.)
     if args.lat and args.lon:
@@ -58,6 +96,8 @@ def main():
     if not args.quiet:
         print(f"Geolocation Bounds: {box}")
 
+    #### Product validation ####
+
     catalog = ProductCatalog()
     inst, prod = args.product.split('-')
     concept_id = catalog.get_concept_id(f"{args.mission}", inst, prod)
@@ -65,7 +105,36 @@ def main():
     if not args.quiet:
         print(f"Concept ID for {args.mission} {inst} {prod}: {concept_id}")
 
-    asyncio.run(run_with(concept_id, temporal, box,
+    #### Time validation ####
+
+    meta = catalog.get_product_metadata(f"{args.mission}", inst, prod)
+    if args.start:
+        args.start = add_midnight_utc(args.start)
+        if "start-date" in meta:
+            validate_time_after(add_midnight_utc(
+                meta["start-date"].strftime("%Y-%m-%d")), args.start)
+    else:
+        if "start-date" in meta:
+            args.start = add_midnight_utc(meta["start-date"])
+
+    if args.end:
+        args.end = add_midnight_utc(args.end)
+        if "end-date" in meta:
+            validate_time_before(add_midnight_utc(
+                meta["end-date"].strftime("%Y-%m-%d")), args.end)
+    else:
+        if "end-date" in meta:
+            args.end = add_midnight_utc(meta["end-date"])
+
+    temporal = None
+    if args.start and args.end:
+        temporal = f"{args.start},{args.end}"
+    if not args.quiet:
+        print(f"Temporal range: {temporal}")
+
+    #### Async run ####
+
+    asyncio.run(run_with(concept_id, temporal, box, meta["formats"],
                          args.page_size, args.max_pages,
                          verbose=not args.quiet))
 
