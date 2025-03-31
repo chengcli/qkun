@@ -1,6 +1,7 @@
 import aiohttp
 import re
 import requests
+import numpy as np
 from datetime import datetime, timezone
 from typing import Tuple, List, Optional
 
@@ -30,6 +31,32 @@ def get_granule_urls(granules: List[dict], formats=['.hdf', '.nc']) -> List[str]
     # filter only ".hdf" or ".nc" files
     urls = [url for url in urls if url.endswith(tuple(formats))]
     return urls
+
+def get_granule_thumbnails(granules: List[dict]):
+    """Extract thumbnail image URL from granule entry"""
+    urls = []
+    for granule in granules:
+        for link in granule.get("links", []):
+            if link.get("rel") == "http://esipfed.org/ns/fedsearch/1.1/browse#":
+                urls.append(link.get("href"))
+    # filter only ".png" or ".jpg" files
+    urls = [url for url in urls if url.endswith(('.png', '.jpg'))]
+    return urls
+
+def get_granule_polygons(granules: List[dict]):
+    """Extract polygon coordinates from granule entry"""
+    polygons = []
+    for granule in granules:
+        for polygon in granule.get("polygons", []):
+            polygons.append(polygon)
+    return polygons
+
+def parse_polygon(coords_str: str) -> List[Tuple[float, float]]:
+    # Split into floats
+    numbers = list(map(float, coords_str.split()))
+    # Group into (lon, lat) pairs
+    polygon = list(zip(numbers[::2], numbers[1::2]))
+    return np.array(polygon)
 
 def validate_temporal(start: str, end: str):
     """Validate that start and end times are ISO 8601 UTC strings and that start < end"""

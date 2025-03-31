@@ -30,6 +30,7 @@ def get_lru_files(path):
                 files.append((atime, file_path))
             except FileNotFoundError:
                 continue
+        break  # Only check the top directory
     files.sort()  # Oldest access time first
     return [f for _, f in files]
 

@@ -1,14 +1,21 @@
 import argparse
 import asyncio
 import re
+import requests
+import os
+import numpy as np
 from itertools import chain
 from typing import List, Optional
 from datetime import datetime, timezone
+from qkun import CACHE_IMAGE_PATH, CACHE_POLYGON_PATH
 from qkun.geobox import GeoBox
 from qkun.cmr.product_catalog import ProductCatalog
 from qkun.cmr.granule_search import (
         GranuleSearcher,
         get_granule_urls,
+        get_granule_thumbnails,
+        get_granule_polygons,
+        parse_polygon,
         add_midnight_utc
         )
 
@@ -32,8 +39,19 @@ def augment_with_cases(strings):
                 augmented.append(variant)
     return augmented
 
+def remove_extension(filename, num):
+    parts = filename.split(".")
+    if len(parts) >= 3:
+        # Remove second-from-last extension
+        parts.pop(num)
+        new_filename = ".".join(parts)
+    else:
+        new_filename = filename  # unchanged if not enough parts
+    return new_filename
+
 async def run_with(concept_id, temporal, box, formats,
-                   page_size, max_pages, verbose=True):
+                   page_size, max_pages, verbose=True, 
+                   download_thumb=False):
     searcher = GranuleSearcher(
         concept_id=concept_id,
         temporal=temporal,
@@ -49,9 +67,29 @@ async def run_with(concept_id, temporal, box, formats,
     async for granule_page in searcher.stream():
         if verbose:
             print(f"Got page with {len(granule_page)} granules")
+        basenames = []
         for url in get_granule_urls(granule_page, 
                                     augment_with_cases(formats)):
+            basenames.append(url.split('/')[-1])
             print(url)
+
+        if download_thumb:
+            for url in get_granule_thumbnails(granule_page):
+                _, basename = url.rsplit('/', 1)
+                savename = f'{CACHE_IMAGE_PATH}/{remove_extension(basename, -2)}'
+                if os.path.exists(savename): # Skip if already downloaded
+                    continue
+
+                if verbose:
+                    print(f"Downloading thumbnail: {basename}...")
+                response = requests.get(url)
+                with open(f'{savename}', 'wb') as f:
+                    f.write(response.content)
+
+        # save polygon
+        for i, polygon in enumerate(get_granule_polygons(granule_page)):
+            basename = remove_extension(basenames[i], -1) + '.polygon.npy'
+            np.save(f'{CACHE_POLYGON_PATH}/{basename}', parse_polygon(polygon[0]))
 
 def main():
     parser = argparse.ArgumentParser(description="Search for NASA CMR granules.")
@@ -69,6 +107,8 @@ def main():
                         help="Maximum number of pages to search, default 10")
     parser.add_argument("--quiet", action="store_true",
                         help="Suppress logging, default False")
+    parser.add_argument('--download-thumb', action='store_true',
+                        help="Download thumbnail")
 
     args = parser.parse_args()
 
@@ -125,7 +165,8 @@ def main():
     asyncio.run(run_with(concept_id, temporal, box, 
                          list(chain.from_iterable(meta["formats"])),
                          args.page_size, args.max_pages,
-                         verbose=not args.quiet))
+                         verbose=not args.quiet,
+                         download_thumb=args.download_thumb))
 
 if __name__ == "__main__":
     main()
