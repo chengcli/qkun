@@ -1,3 +1,15 @@
+# Resources
 # search for granules
-
 https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html#find-all-granules
+
+# download granules
+https://urs.earthdata.nasa.gov/documentation/for_users/data_access/python
+
+# cmr
+https://wiki.earthdata.nasa.gov/pages/viewpage.action?pageId=266966582
+
+# REST API
+https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html#c-twod-coordinate-system
+
+# daac
+https://daac.gsfc.nasa.gov/datasets/GPM_1BGMI_07/summary?keywords=GPM_1BGMI_07

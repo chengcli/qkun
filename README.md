@@ -83,10 +83,9 @@ digest-granule download_list.txt --select ::2 --save-dir ${HOME}/.cache/qkun
 ## 🛰️ Supported Missions, Instruments & Data Levels
 | Mission        | Instrument(s)   | Data Level(s) |
 |----------------|------------------|----------------|
-| **PACE**       | OCI              | L1A, L1B, L2   |
-| **MODIS Aqua** | MODIS            | L1B, L2        |
-| **VIIRS**      | VIIRS (JPSS)     | L1B, L2        |
-| **Sentinel-3** | OLCI             | L1, L2         |
+| **PACE**       | OCI              | L1B, L2        |
+| **Aqua**       | AIRS,MODIS       | L1B, L2        |
+| **GPM**        | GMI              | L1B, L2        |
 | *(More coming)*| ...              | ...            |
 
 ---
