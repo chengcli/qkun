@@ -1,21 +1,22 @@
 import argparse
 import asyncio
 import re
-import requests
 import os
+import yaml
 import numpy as np
+from pathlib import Path
 from itertools import chain
 from typing import List, Optional
 from datetime import datetime, timezone
 from qkun import CACHE_IMAGE_PATH, CACHE_POLYGON_PATH
 from qkun.geobox import GeoBox
 from qkun.cmr.product_catalog import ProductCatalog
+from qkun.cmr.granule_download import GranuleDownloader
 from qkun.cmr.granule_search import (
         GranuleSearcher,
         get_granule_urls,
         get_granule_thumbnails,
         get_granule_polygons,
-        parse_polygon,
         add_midnight_utc
         )
 
@@ -68,28 +69,29 @@ async def run_with(concept_id, temporal, box, formats,
         if verbose:
             print(f"Got page with {len(granule_page)} granules")
         basenames = []
-        for url in get_granule_urls(granule_page, 
+        for url in get_granule_urls(granule_page,
                                     augment_with_cases(formats)):
             basenames.append(url.split('/')[-1])
             print(url)
 
-        if download_thumb:
-            for url in get_granule_thumbnails(granule_page):
-                _, basename = url.rsplit('/', 1)
-                savename = f'{CACHE_IMAGE_PATH}/{remove_extension(basename, -2)}'
-                if os.path.exists(savename): # Skip if already downloaded
-                    continue
-
-                if verbose:
-                    print(f"Downloading thumbnail: {basename}...")
-                response = requests.get(url)
-                with open(f'{savename}', 'wb') as f:
-                    f.write(response.content)
-
         # save polygon
-        for i, polygon in enumerate(get_granule_polygons(granule_page)):
-            basename = remove_extension(basenames[i], -1) + '.polygon.npy'
-            np.save(f'{CACHE_POLYGON_PATH}/{basename}', parse_polygon(polygon[0]))
+        for i, granule in enumerate(granule_page):
+            basename = remove_extension(basenames[i], -1) + '.yaml'
+            save_dir = Path(f'{CACHE_POLYGON_PATH}/{temporal}/').resolve()
+            save_dir.mkdir(parents=True, exist_ok=True)
+            with open(f'{save_dir}/{basename}', 'w') as f:
+                yaml.dump(granule, f, sort_keys=False, default_flow_style=False)
+
+        # save thumbnail
+        if download_thumb:
+            save_dir = f'{CACHE_IMAGE_PATH}/{temporal}/'
+            if os.path.exists(save_dir): # Skip if already downloaded
+                continue
+
+            downloader = GranuleDownloader("", "", save_dir, verbose=False)
+            print(f"Downloading thumbnails to {save_dir} ...")
+            await asyncio.gather(*(downloader.download(url)
+                                   for url in get_granule_thumbnails(granule_page)))
 
 def main():
     parser = argparse.ArgumentParser(description="Search for NASA CMR granules.")
