@@ -1,14 +1,22 @@
 import argparse
 import asyncio
 import re
+import os
+import yaml
+import numpy as np
+from pathlib import Path
 from itertools import chain
 from typing import List, Optional
 from datetime import datetime, timezone
+from qkun import CACHE_IMAGE_PATH, CACHE_DIGEST_PATH
 from qkun.geobox import GeoBox
 from qkun.cmr.product_catalog import ProductCatalog
+from qkun.cmr.granule_download import GranuleDownloader
 from qkun.cmr.granule_search import (
         GranuleSearcher,
         get_granule_urls,
+        get_granule_thumbnails,
+        get_granule_polygons,
         add_midnight_utc
         )
 
@@ -32,8 +40,19 @@ def augment_with_cases(strings):
                 augmented.append(variant)
     return augmented
 
+def remove_extension(filename, num):
+    parts = filename.split(".")
+    if len(parts) >= 3:
+        # Remove second-from-last extension
+        parts.pop(num)
+        new_filename = ".".join(parts)
+    else:
+        new_filename = filename  # unchanged if not enough parts
+    return new_filename
+
 async def run_with(concept_id, temporal, box, formats,
-                   page_size, max_pages, verbose=True):
+                   page_size, max_pages, verbose=True, 
+                   download_thumb=False):
     searcher = GranuleSearcher(
         concept_id=concept_id,
         temporal=temporal,
@@ -49,9 +68,30 @@ async def run_with(concept_id, temporal, box, formats,
     async for granule_page in searcher.stream():
         if verbose:
             print(f"Got page with {len(granule_page)} granules")
-        for url in get_granule_urls(granule_page, 
+        basenames = []
+        for url in get_granule_urls(granule_page,
                                     augment_with_cases(formats)):
+            basenames.append(url.split('/')[-1])
             print(url)
+
+        # save digest
+        for i, granule in enumerate(granule_page):
+            basename = remove_extension(basenames[i], -1) + '.yaml'
+            save_dir = Path(f'{CACHE_DIGEST_PATH}/{temporal}/').resolve()
+            save_dir.mkdir(parents=True, exist_ok=True)
+            with open(f'{save_dir}/{basename}', 'w') as f:
+                yaml.dump(granule, f, sort_keys=False, default_flow_style=False)
+
+        # save thumbnail
+        if download_thumb:
+            save_dir = f'{CACHE_IMAGE_PATH}/{temporal}/'
+            if os.path.exists(save_dir): # Skip if already downloaded
+                continue
+
+            downloader = GranuleDownloader("", "", save_dir, verbose=False)
+            print(f"Downloading thumbnails to {save_dir} ...")
+            await asyncio.gather(*(downloader.download(url)
+                                   for url in get_granule_thumbnails(granule_page)))
 
 def main():
     parser = argparse.ArgumentParser(description="Search for NASA CMR granules.")
@@ -69,6 +109,8 @@ def main():
                         help="Maximum number of pages to search, default 10")
     parser.add_argument("--quiet", action="store_true",
                         help="Suppress logging, default False")
+    parser.add_argument('--download-thumb', action='store_true',
+                        help="Download thumbnail")
 
     args = parser.parse_args()
 
@@ -125,7 +167,8 @@ def main():
     asyncio.run(run_with(concept_id, temporal, box, 
                          list(chain.from_iterable(meta["formats"])),
                          args.page_size, args.max_pages,
-                         verbose=not args.quiet))
+                         verbose=not args.quiet,
+                         download_thumb=args.download_thumb))
 
 if __name__ == "__main__":
     main()
