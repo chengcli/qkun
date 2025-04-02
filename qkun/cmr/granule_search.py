@@ -55,7 +55,7 @@ def parse_polygon(coords_str: str) -> List[Tuple[float, float]]:
     # Split into floats
     numbers = list(map(float, coords_str.split()))
     # Group into (lon, lat) pairs
-    polygon = list(zip(numbers[::2], numbers[1::2]))
+    polygon = list(zip(numbers[1::2], numbers[::2]))
     return np.array(polygon)
 
 def validate_temporal(start: str, end: str):

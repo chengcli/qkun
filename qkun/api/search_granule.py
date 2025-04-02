@@ -8,7 +8,7 @@ from pathlib import Path
 from itertools import chain
 from typing import List, Optional
 from datetime import datetime, timezone
-from qkun import CACHE_IMAGE_PATH, CACHE_POLYGON_PATH
+from qkun import CACHE_IMAGE_PATH, CACHE_DIGEST_PATH
 from qkun.geobox import GeoBox
 from qkun.cmr.product_catalog import ProductCatalog
 from qkun.cmr.granule_download import GranuleDownloader
@@ -74,10 +74,10 @@ async def run_with(concept_id, temporal, box, formats,
             basenames.append(url.split('/')[-1])
             print(url)
 
-        # save polygon
+        # save digest
         for i, granule in enumerate(granule_page):
             basename = remove_extension(basenames[i], -1) + '.yaml'
-            save_dir = Path(f'{CACHE_POLYGON_PATH}/{temporal}/').resolve()
+            save_dir = Path(f'{CACHE_DIGEST_PATH}/{temporal}/').resolve()
             save_dir.mkdir(parents=True, exist_ok=True)
             with open(f'{save_dir}/{basename}', 'w') as f:
                 yaml.dump(granule, f, sort_keys=False, default_flow_style=False)
