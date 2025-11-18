@@ -224,14 +224,17 @@ def compute_human_perception_weights(wavelengths: np.ndarray) -> np.ndarray:
 
 
 def create_false_color_image(nc_path: str, subsample: int = 5, 
-                            enhance_contrast: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+                            bright: float = 0.3) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Create a human-perceived false color image from OCI observation data.
+    Create an RGB image from OCI observation data following NASA VITALS recipe.
     
-    This function applies human perception weights to all available wavelength bands,
-    weighted by both human vision sensitivity and solar irradiance, to create RGB channels.
-    Uses the three-Gaussian model (S, M, L cone cells) to properly weight each band's
-    contribution to the final color image.
+    This implementation follows the approach from NASA VITALS:
+    https://nasa.github.io/VITALS/python/Exploring_PACE_OCI_L2_SFRFL.html
+    
+    Steps:
+    1. Select bands nearest to Red (650nm), Green (560nm), Blue (470nm)
+    2. Apply gamma adjustment based on mean of valid values
+    3. Clip to [0, 1] range
     
     Parameters:
     -----------
@@ -239,30 +242,31 @@ def create_false_color_image(nc_path: str, subsample: int = 5,
         Path to the OCI netCDF file
     subsample : int, optional
         Subsampling factor for the data (default: 5)
-    enhance_contrast : bool, optional
-        Apply histogram equalization for better visibility (default: True)
+    bright : float, optional
+        Target brightness level for gamma adjustment (default: 0.3)
+        Higher values = brighter image
         
     Returns:
     --------
     rgb_image : np.ndarray
-        RGB image array with shape (scans, pixels, 3) scaled to 0-255 uint8
+        RGB image array with shape (scans, pixels, 3) scaled to 0-1 range
     lon : np.ndarray
         Longitude array (subsampled)
     lat : np.ndarray
         Latitude array (subsampled)
     """
+    import math
+    
     with Dataset(nc_path, 'r') as ds:
         # Get observation data
         obs_group = ds.groups['observation_data']
         rhot_blue = obs_group.variables['rhot_blue'][:, ::subsample, ::subsample]
         rhot_red = obs_group.variables['rhot_red'][:, ::subsample, ::subsample]
         
-        # Get wavelengths and solar irradiance
+        # Get wavelengths
         params = ds.groups['sensor_band_parameters']
         blue_wavelength = params.variables['blue_wavelength'][:]
-        blue_irradiance = params.variables['blue_solar_irradiance'][:]
         red_wavelength = params.variables['red_wavelength'][:]
-        red_irradiance = params.variables['red_solar_irradiance'][:]
         
         # Get geolocation
         geo_group = ds.groups['geolocation_data']
@@ -271,111 +275,60 @@ def create_false_color_image(nc_path: str, subsample: int = 5,
     
     # Combine all wavelengths and data
     all_wavelengths = np.concatenate([blue_wavelength, red_wavelength])
-    all_irradiance = np.concatenate([blue_irradiance, red_irradiance])
-    
-    # Stack all bands together (blue_bands + red_bands, scans, pixels)
     all_rhot = np.ma.concatenate([rhot_blue, rhot_red], axis=0)
     
-    # Compute human perception weights for all wavelengths
-    human_weights = compute_human_perception_weights(all_wavelengths)
+    # Select bands nearest to target wavelengths (NASA VITALS approach)
+    # Red: 650nm, Green: 560nm, Blue: 470nm
+    target_wavelengths = [650, 560, 470]
+    selected_bands = []
     
-    # Define target wavelengths for RGB channels
-    red_target = 650.0    # Red channel centered at 650 nm
-    green_target = 545.0  # Green channel centered at 545 nm (M-cone peak)
-    blue_target = 445.0   # Blue channel centered at 445 nm (S-cone peak)
+    for target_wl in target_wavelengths:
+        # Find the band closest to the target wavelength
+        idx = np.argmin(np.abs(all_wavelengths - target_wl))
+        selected_bands.append(idx)
     
-    # Compute weights for each RGB channel using Gaussians
-    sigma_rgb = 40.0  # Standard deviation for RGB channel selection
+    # Extract the selected bands for RGB
+    # Shape: (3, scans, pixels) -> (scans, pixels, 3)
+    rgb_image = np.ma.stack([
+        all_rhot[selected_bands[0], :, :],  # Red
+        all_rhot[selected_bands[1], :, :],  # Green
+        all_rhot[selected_bands[2], :, :]   # Blue
+    ], axis=-1)
     
-    # Red channel weights: Gaussian centered at red_target
-    red_weights = np.exp(-0.5 * ((all_wavelengths - red_target) / sigma_rgb) ** 2)
-    red_weights = red_weights * human_weights * all_irradiance
-    red_weights = red_weights / red_weights.sum() if red_weights.sum() > 0 else red_weights
+    # Apply gamma adjustment following NASA VITALS approach
+    # Mask nan and negative values
+    invalid = np.ma.getmaskarray(rgb_image) | (rgb_image.data < 0)
+    valid = ~invalid
     
-    # Green channel weights: Gaussian centered at green_target
-    green_weights = np.exp(-0.5 * ((all_wavelengths - green_target) / sigma_rgb) ** 2)
-    green_weights = green_weights * human_weights * all_irradiance
-    green_weights = green_weights / green_weights.sum() if green_weights.sum() > 0 else green_weights
-    
-    # Blue channel weights: Gaussian centered at blue_target
-    blue_weights = np.exp(-0.5 * ((all_wavelengths - blue_target) / sigma_rgb) ** 2)
-    blue_weights = blue_weights * human_weights * all_irradiance
-    blue_weights = blue_weights / blue_weights.sum() if blue_weights.sum() > 0 else blue_weights
-    
-    # Apply weights to create RGB channels
-    # Reshape for broadcasting: weights shape (n_bands,), rhot shape (n_bands, scans, pixels)
-    red_channel = np.ma.sum(all_rhot * red_weights[:, np.newaxis, np.newaxis], axis=0)
-    green_channel = np.ma.sum(all_rhot * green_weights[:, np.newaxis, np.newaxis], axis=0)
-    blue_channel = np.ma.sum(all_rhot * blue_weights[:, np.newaxis, np.newaxis], axis=0)
-    
-    # Stack to create RGB image
-    rgb_image = np.ma.stack([red_channel, green_channel, blue_channel], axis=-1)
-    
-    # Apply contrast enhancement to make features visible
-    if enhance_contrast:
-        # Use histogram equalization approach for better visibility
-        # Apply the same stretch to all channels to maintain color balance
-        # First, get the overall intensity range
-        all_data = []
-        for i in range(3):
-            channel = rgb_image[:, :, i]
-            valid_data = channel.compressed()
-            if len(valid_data) > 0:
-                all_data.extend(valid_data)
-        
-        if len(all_data) > 0:
-            # Use percentile-based stretch on combined data for consistent scaling
-            vmin = np.percentile(all_data, 1)  # 1st percentile
-            vmax = np.percentile(all_data, 99)  # 99th percentile
-            
-            # Apply the same stretch to all channels
-            for i in range(3):
-                channel = rgb_image[:, :, i]
-                
-                # Apply linear stretch
-                stretched = (channel - vmin) / (vmax - vmin)
-                stretched = np.ma.clip(stretched, 0, 1)
-                
-                # Apply gamma correction for additional enhancement (gamma < 1 brightens)
-                gamma = 0.7  # Slightly less aggressive brightening to preserve colors
-                stretched = np.ma.power(stretched, gamma)
-                
-                # Scale to 0-255 for 8-bit display
-                rgb_image[:, :, i] = stretched * 255
+    # Calculate gamma based on the mean of valid values across all channels
+    if np.any(valid):
+        mean_valid = np.nanmean(rgb_image.data[valid])
+        if mean_valid > 0:
+            gamma = math.log(bright) / math.log(mean_valid)
         else:
-            rgb_image[:, :, :] = 0
+            gamma = 1.0
     else:
-        # Simple percentile normalization with consistent scaling
-        all_data = []
-        for i in range(3):
-            valid_data = rgb_image[:, :, i].compressed()
-            if len(valid_data) > 0:
-                all_data.extend(valid_data)
-        
-        if len(all_data) > 0:
-            vmin = np.percentile(all_data, 2)
-            vmax = np.percentile(all_data, 98)
-            
-            for i in range(3):
-                channel = rgb_image[:, :, i]
-                rgb_image[:, :, i] = np.ma.clip((channel - vmin) / (vmax - vmin), 0, 1) * 255
-        else:
-            rgb_image[:, :, :] = 0
+        gamma = 1.0
     
-    # Convert to uint8 for proper display
-    rgb_image = rgb_image.astype(np.uint8)
+    # Apply gamma correction and clip to [0, 1]
+    scaled = np.full_like(rgb_image.data, np.nan)
+    scaled[valid] = np.power(rgb_image.data[valid], gamma)
+    rgb_image = np.ma.masked_invalid(np.clip(scaled, 0, 1))
     
     return rgb_image, lon, lat
 
 
-def plot_false_color_image(nc_path: str, subsample: int = 5, 
+def plot_false_color_image(nc_path: str, subsample: int = 5, bright: float = 0.3,
                            ax: Optional[plt.Axes] = None,
                            save_path: Optional[str] = None) -> plt.Figure:
     """
-    Plot the false color image on a map projection with proper geographic coordinate mapping.
+    Plot the false color image on a map projection following NASA VITALS recipe.
     
     Uses scatter plot to properly map each pixel to its actual lat/lon coordinates,
     preserving the tilted satellite swath geometry and displaying true RGB colors.
+    
+    Follows the approach from NASA VITALS:
+    https://nasa.github.io/VITALS/python/Exploring_PACE_OCI_L2_SFRFL.html
     
     Parameters:
     -----------
@@ -383,6 +336,9 @@ def plot_false_color_image(nc_path: str, subsample: int = 5,
         Path to the OCI netCDF file
     subsample : int, optional
         Subsampling factor for the data (default: 5)
+    bright : float, optional
+        Target brightness for gamma adjustment (default: 0.3)
+        Higher values = brighter image
     ax : matplotlib.axes.Axes, optional
         Axes to plot on. If None, creates a new figure with cartopy projection
     save_path : str, optional
@@ -393,8 +349,8 @@ def plot_false_color_image(nc_path: str, subsample: int = 5,
     fig : matplotlib.figure.Figure
         The figure object
     """
-    # Create false color image with contrast enhancement
-    rgb_image, lon, lat = create_false_color_image(nc_path, subsample, enhance_contrast=True)
+    # Create false color image using NASA VITALS approach
+    rgb_image, lon, lat = create_false_color_image(nc_path, subsample, bright=bright)
     
     if ax is None:
         fig = plt.figure(figsize=(14, 10))
@@ -410,10 +366,11 @@ def plot_false_color_image(nc_path: str, subsample: int = 5,
     ax.gridlines(draw_labels=True, linewidth=0.5, alpha=0.5, zorder=3)
     
     # Convert masked array to regular array, filling masked values with 0
+    # RGB image is already in 0-1 range from gamma adjustment
     rgb_display = np.ma.filled(rgb_image, 0)
     
-    # Normalize RGB to 0-1 range for matplotlib
-    rgb_normalized = rgb_display.astype(float) / 255.0
+    # RGB is already normalized to 0-1 range
+    rgb_normalized = rgb_display.astype(float)
     
     # For satellite swaths with tilted/irregular grids and RGB colors,
     # use scatter plot with square markers
@@ -468,7 +425,7 @@ def plot_false_color_image(nc_path: str, subsample: int = 5,
                    lat.min() - margin, lat.max() + margin],
                   crs=ccrs.PlateCarree())
     
-    ax.set_title('OCI False Color Image (Enhanced, Human Perception Weighted)', 
+    ax.set_title('OCI False Color Image (NASA VITALS Recipe)', 
                  fontsize=14, fontweight='bold')
     
     if save_path:
