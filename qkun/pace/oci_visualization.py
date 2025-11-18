@@ -213,11 +213,11 @@ def create_false_color_image(nc_path: str, subsample: int = 5,
     """
     Create a human-perceived false color image from OCI observation data.
     
-    This function applies human perception weights to the blue and red bands,
-    normalizes by solar irradiance, and creates an RGB image where:
-    - Red channel: weighted red bands
-    - Green channel: average of weighted blue and red
-    - Blue channel: weighted blue bands
+    This function selects appropriate wavelength bands for RGB channels to create
+    a natural-looking image where white surfaces (like clouds) appear white.
+    - Red channel: red band closest to 650 nm
+    - Green channel: blue band closest to 550 nm (from blue CCD)
+    - Blue channel: blue band closest to 450 nm
     
     Parameters:
     -----------
@@ -255,24 +255,18 @@ def create_false_color_image(nc_path: str, subsample: int = 5,
         lon = geo_group.variables['longitude'][::subsample, ::subsample]
         lat = geo_group.variables['latitude'][::subsample, ::subsample]
     
-    # Compute human perception weights
-    blue_weights = compute_human_perception_weights(blue_wavelength)
-    red_weights = compute_human_perception_weights(red_wavelength)
+    # Select appropriate bands for RGB channels for natural color
+    # Red channel: wavelength closest to 650 nm
+    red_idx = np.argmin(np.abs(red_wavelength - 650))
+    red_channel = rhot_red[red_idx, :, :]
     
-    # Apply weights and normalize by solar irradiance
-    # Weight by both human perception and solar irradiance
-    blue_weights_norm = blue_weights * blue_irradiance
-    blue_weights_norm = blue_weights_norm / blue_weights_norm.sum()
+    # Green channel: wavelength closest to 550 nm (from blue CCD which goes up to 610 nm)
+    green_idx = np.argmin(np.abs(blue_wavelength - 550))
+    green_channel = rhot_blue[green_idx, :, :]
     
-    red_weights_norm = red_weights * red_irradiance
-    red_weights_norm = red_weights_norm / red_weights_norm.sum()
-    
-    # Weighted sum over bands
-    blue_channel = np.ma.sum(rhot_blue * blue_weights_norm[:, None, None], axis=0)
-    red_channel = np.ma.sum(rhot_red * red_weights_norm[:, None, None], axis=0)
-    
-    # Create green channel as average of blue and red for better visualization
-    green_channel = (blue_channel + red_channel) / 2.0
+    # Blue channel: wavelength closest to 450 nm
+    blue_idx = np.argmin(np.abs(blue_wavelength - 450))
+    blue_channel = rhot_blue[blue_idx, :, :]
     
     # Stack to create RGB image
     rgb_image = np.ma.stack([red_channel, green_channel, blue_channel], axis=-1)
@@ -280,36 +274,53 @@ def create_false_color_image(nc_path: str, subsample: int = 5,
     # Apply contrast enhancement to make features visible
     if enhance_contrast:
         # Use histogram equalization approach for better visibility
+        # Apply the same stretch to all channels to maintain color balance
+        # First, get the overall intensity range
+        all_data = []
         for i in range(3):
             channel = rgb_image[:, :, i]
-            # Get valid (non-masked) data
             valid_data = channel.compressed()
-            
             if len(valid_data) > 0:
-                # Use percentile-based stretch with aggressive clipping
-                # This maps the useful range to full 0-255 dynamic range
-                vmin = np.percentile(valid_data, 1)  # 1st percentile
-                vmax = np.percentile(valid_data, 99)  # 99th percentile
+                all_data.extend(valid_data)
+        
+        if len(all_data) > 0:
+            # Use percentile-based stretch on combined data for consistent scaling
+            vmin = np.percentile(all_data, 1)  # 1st percentile
+            vmax = np.percentile(all_data, 99)  # 99th percentile
+            
+            # Apply the same stretch to all channels
+            for i in range(3):
+                channel = rgb_image[:, :, i]
                 
                 # Apply linear stretch
                 stretched = (channel - vmin) / (vmax - vmin)
                 stretched = np.ma.clip(stretched, 0, 1)
                 
                 # Apply gamma correction for additional enhancement (gamma < 1 brightens)
-                gamma = 0.6  # Brightening factor
+                gamma = 0.7  # Slightly less aggressive brightening to preserve colors
                 stretched = np.ma.power(stretched, gamma)
                 
                 # Scale to 0-255 for 8-bit display
                 rgb_image[:, :, i] = stretched * 255
-            else:
-                rgb_image[:, :, i] = 0
+        else:
+            rgb_image[:, :, :] = 0
     else:
-        # Simple percentile normalization
+        # Simple percentile normalization with consistent scaling
+        all_data = []
         for i in range(3):
-            channel = rgb_image[:, :, i]
-            vmin = np.percentile(channel.compressed(), 2)
-            vmax = np.percentile(channel.compressed(), 98)
-            rgb_image[:, :, i] = np.ma.clip((channel - vmin) / (vmax - vmin), 0, 1) * 255
+            valid_data = rgb_image[:, :, i].compressed()
+            if len(valid_data) > 0:
+                all_data.extend(valid_data)
+        
+        if len(all_data) > 0:
+            vmin = np.percentile(all_data, 2)
+            vmax = np.percentile(all_data, 98)
+            
+            for i in range(3):
+                channel = rgb_image[:, :, i]
+                rgb_image[:, :, i] = np.ma.clip((channel - vmin) / (vmax - vmin), 0, 1) * 255
+        else:
+            rgb_image[:, :, :] = 0
     
     # Convert to uint8 for proper display
     rgb_image = rgb_image.astype(np.uint8)
