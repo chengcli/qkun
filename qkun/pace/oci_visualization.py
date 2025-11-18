@@ -176,10 +176,11 @@ def plot_observation_polygon(nc_path: str, ax: Optional[plt.Axes] = None,
 
 def compute_human_perception_weights(wavelengths: np.ndarray) -> np.ndarray:
     """
-    Compute human perception weights at given wavelengths based on photopic luminosity function.
+    Compute human perception weights at given wavelengths using three-Gaussian model.
     
-    The photopic luminosity function (CIE 1924) describes the average spectral sensitivity
-    of human visual perception of brightness under daylight conditions.
+    Models the three types of cone cells in human vision (S, M, L cones) which are
+    sensitive to short (blue), medium (green), and long (red) wavelengths.
+    Each cone type is approximated with a Gaussian distribution.
     
     Parameters:
     -----------
@@ -191,13 +192,27 @@ def compute_human_perception_weights(wavelengths: np.ndarray) -> np.ndarray:
     weights : np.ndarray
         Normalized human perception weights (sum to 1)
     """
-    # Photopic luminosity function approximation using Gaussian
-    # Peak at 555 nm (green), with standard deviation ~50 nm
-    peak_wavelength = 555.0  # nm (peak sensitivity in green)
-    sigma = 50.0  # nm (approximate width of sensitivity curve)
+    # Three-Gaussian model for human color perception
+    # Based on the spectral sensitivity of S, M, L cone cells
     
-    # Gaussian approximation of luminosity function
-    weights = np.exp(-0.5 * ((wavelengths - peak_wavelength) / sigma) ** 2)
+    # S-cones (Short wavelength - Blue): peak ~445 nm
+    blue_peak = 445.0  # nm
+    blue_sigma = 40.0  # nm
+    blue_response = np.exp(-0.5 * ((wavelengths - blue_peak) / blue_sigma) ** 2)
+    
+    # M-cones (Medium wavelength - Green): peak ~545 nm  
+    green_peak = 545.0  # nm
+    green_sigma = 50.0  # nm
+    green_response = np.exp(-0.5 * ((wavelengths - green_peak) / green_sigma) ** 2)
+    
+    # L-cones (Long wavelength - Red): peak ~570 nm (but tail extends to 700+ nm)
+    red_peak = 570.0  # nm
+    red_sigma = 60.0  # nm (wider to capture red sensitivity)
+    red_response = np.exp(-0.5 * ((wavelengths - red_peak) / red_sigma) ** 2)
+    
+    # Combine the three responses with appropriate weighting
+    # Weight by relative contributions to luminosity perception
+    weights = 0.3 * blue_response + 0.59 * green_response + 0.11 * red_response
     
     # Normalize weights to sum to 1
     if weights.sum() > 0:
