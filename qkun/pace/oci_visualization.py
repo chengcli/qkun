@@ -334,7 +334,7 @@ def plot_false_color_image(nc_path: str, subsample: int = 5,
     """
     Plot the false color image on a map projection with proper geographic coordinate mapping.
     
-    Uses pcolormesh to properly map each pixel to its actual lat/lon coordinates,
+    Uses scatter plot to properly map each pixel to its actual lat/lon coordinates,
     preserving the tilted satellite swath geometry and displaying true RGB colors.
     
     Parameters:
@@ -375,46 +375,52 @@ def plot_false_color_image(nc_path: str, subsample: int = 5,
     # Normalize RGB to 0-1 range for matplotlib
     rgb_normalized = rgb_display.astype(float) / 255.0
     
-    # For satellite swaths with tilted/irregular grids, we use pcolormesh
-    # pcolormesh requires a dummy scalar field, but we can set face colors directly
+    # For satellite swaths with tilted/irregular grids and RGB colors,
+    # use scatter plot with square markers
+    # This properly maps each pixel to its geographic location while displaying RGB colors
     
-    # Create a dummy scalar field (all zeros)
-    dummy = np.zeros(rgb_normalized.shape[:2])
-    
-    # Plot with pcolormesh to get proper coordinate mapping
-    mesh = ax.pcolormesh(lon, lat, dummy,
-                         transform=ccrs.PlateCarree(),
-                         shading='auto',
-                         zorder=1)
-    
-    # Now set the facecolors to our RGB values
-    # pcolormesh creates quadrilaterals, so we need to flatten and set colors
-    # Get the number of faces (cells)
+    # Flatten arrays
     ny, nx = rgb_normalized.shape[:2]
-    n_cells = (ny - 1) * (nx - 1) if rgb_normalized.shape[:2] == lon.shape else ny * nx
+    lon_flat = lon.flatten()
+    lat_flat = lat.flatten()
+    colors_flat = rgb_normalized.reshape(-1, 3)
     
-    # Flatten RGB colors for each cell
-    # If shading='auto' or 'flat', we need (ny-1, nx-1) colors
-    # If shading='gouraud', we need (ny, nx) colors
-    # With 'auto' on quadrilateral mesh, it uses 'flat' style
-    
-    # For 'flat' shading, pcolormesh uses the average of corner values
-    # But we want to set explicit colors per cell
-    # So we'll use the center color for each cell
-    
-    # Reshape RGB to match the number of faces
-    if lon.shape == rgb_normalized.shape[:2]:
-        # Data and coordinates have same shape, use direct mapping
-        colors_flat = rgb_normalized.reshape(-1, 3)
+    # Calculate appropriate marker size for coverage
+    # Estimate pixel spacing
+    if ny > 1 and nx > 1:
+        # Calculate average spacing in degrees
+        lon_spacing = np.abs(np.diff(lon, axis=1)).mean() if nx > 1 else 0.1
+        lat_spacing = np.abs(np.diff(lat, axis=0)).mean() if ny > 1 else 0.1
+        avg_spacing = (lon_spacing + lat_spacing) / 2
+        
+        # Convert spacing to points for scatter marker size
+        # This is approximate and may need adjustment
+        # Get axis size in points
+        bbox = ax.get_window_extent()
+        ax_width_pts = bbox.width
+        ax_height_pts = bbox.height
+        
+        # Get data range
+        lon_range = lon.max() - lon.min()
+        lat_range = lat.max() - lat.min()
+        
+        # Calculate points per degree (approximate)
+        pts_per_deg_lon = ax_width_pts / lon_range if lon_range > 0 else 100
+        pts_per_deg_lat = ax_height_pts / lat_range if lat_range > 0 else 100
+        pts_per_deg = (pts_per_deg_lon + pts_per_deg_lat) / 2
+        
+        # Marker size in points^2 (add overlap factor)
+        marker_size = (avg_spacing * pts_per_deg * 1.2) ** 2
+        
+        # Clamp to reasonable range
+        marker_size = np.clip(marker_size, 1, 10000)
     else:
-        # Adjust if needed
-        colors_flat = rgb_normalized.reshape(-1, 3)
+        marker_size = 100
     
-    # Set the face colors
-    # Don't call set_array(None) as it causes issues with cartopy
-    # Just set the facecolors directly
-    mesh.set_facecolor(colors_flat)
-    mesh.set_edgecolor('none')
+    # Plot using scatter with square markers and RGB colors
+    scatter = ax.scatter(lon_flat, lat_flat, c=colors_flat, s=marker_size,
+                        marker='s', edgecolors='none',
+                        transform=ccrs.PlateCarree(), zorder=1)
     
     # Set extent with margin
     margin = 1
