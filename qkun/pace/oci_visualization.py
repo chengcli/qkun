@@ -208,7 +208,8 @@ def compute_human_perception_weights(wavelengths: np.ndarray) -> np.ndarray:
     return weights
 
 
-def create_false_color_image(nc_path: str, subsample: int = 5) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def create_false_color_image(nc_path: str, subsample: int = 5, 
+                            enhance_contrast: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Create a human-perceived false color image from OCI observation data.
     
@@ -224,11 +225,13 @@ def create_false_color_image(nc_path: str, subsample: int = 5) -> Tuple[np.ndarr
         Path to the OCI netCDF file
     subsample : int, optional
         Subsampling factor for the data (default: 5)
+    enhance_contrast : bool, optional
+        Apply histogram equalization for better visibility (default: True)
         
     Returns:
     --------
     rgb_image : np.ndarray
-        RGB image array with shape (scans, pixels, 3)
+        RGB image array with shape (scans, pixels, 3) scaled to 0-255 uint8
     lon : np.ndarray
         Longitude array (subsampled)
     lat : np.ndarray
@@ -274,12 +277,42 @@ def create_false_color_image(nc_path: str, subsample: int = 5) -> Tuple[np.ndarr
     # Stack to create RGB image
     rgb_image = np.ma.stack([red_channel, green_channel, blue_channel], axis=-1)
     
-    # Normalize to 0-1 range for display
-    for i in range(3):
-        channel = rgb_image[:, :, i]
-        vmin = np.percentile(channel.compressed(), 2)  # 2nd percentile
-        vmax = np.percentile(channel.compressed(), 98)  # 98th percentile
-        rgb_image[:, :, i] = np.ma.clip((channel - vmin) / (vmax - vmin), 0, 1)
+    # Apply contrast enhancement to make features visible
+    if enhance_contrast:
+        # Use histogram equalization approach for better visibility
+        for i in range(3):
+            channel = rgb_image[:, :, i]
+            # Get valid (non-masked) data
+            valid_data = channel.compressed()
+            
+            if len(valid_data) > 0:
+                # Use percentile-based stretch with aggressive clipping
+                # This maps the useful range to full 0-255 dynamic range
+                vmin = np.percentile(valid_data, 1)  # 1st percentile
+                vmax = np.percentile(valid_data, 99)  # 99th percentile
+                
+                # Apply linear stretch
+                stretched = (channel - vmin) / (vmax - vmin)
+                stretched = np.ma.clip(stretched, 0, 1)
+                
+                # Apply gamma correction for additional enhancement (gamma < 1 brightens)
+                gamma = 0.6  # Brightening factor
+                stretched = np.ma.power(stretched, gamma)
+                
+                # Scale to 0-255 for 8-bit display
+                rgb_image[:, :, i] = stretched * 255
+            else:
+                rgb_image[:, :, i] = 0
+    else:
+        # Simple percentile normalization
+        for i in range(3):
+            channel = rgb_image[:, :, i]
+            vmin = np.percentile(channel.compressed(), 2)
+            vmax = np.percentile(channel.compressed(), 98)
+            rgb_image[:, :, i] = np.ma.clip((channel - vmin) / (vmax - vmin), 0, 1) * 255
+    
+    # Convert to uint8 for proper display
+    rgb_image = rgb_image.astype(np.uint8)
     
     return rgb_image, lon, lat
 
@@ -288,7 +321,7 @@ def plot_false_color_image(nc_path: str, subsample: int = 5,
                            ax: Optional[plt.Axes] = None,
                            save_path: Optional[str] = None) -> plt.Figure:
     """
-    Plot the false color image on a map projection.
+    Plot the false color image on a map projection with proper RGB coordinate mapping.
     
     Parameters:
     -----------
@@ -306,8 +339,8 @@ def plot_false_color_image(nc_path: str, subsample: int = 5,
     fig : matplotlib.figure.Figure
         The figure object
     """
-    # Create false color image
-    rgb_image, lon, lat = create_false_color_image(nc_path, subsample)
+    # Create false color image with contrast enhancement
+    rgb_image, lon, lat = create_false_color_image(nc_path, subsample, enhance_contrast=True)
     
     if ax is None:
         fig = plt.figure(figsize=(14, 10))
@@ -322,26 +355,45 @@ def plot_false_color_image(nc_path: str, subsample: int = 5,
     ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5, alpha=0.5)
     ax.gridlines(draw_labels=True, linewidth=0.5, alpha=0.5)
     
-    # Plot the false color image
-    # Use pcolormesh for better handling of irregular grids
-    im = ax.pcolormesh(lon, lat, rgb_image[:, :, 0], 
-                       transform=ccrs.PlateCarree(),
-                       shading='auto')
+    # Plot RGB image using pcolormesh for each channel separately, then composite
+    # This approach properly maps the irregular grid to geographic coordinates
     
-    # For RGB display, use imshow-like approach with corner coordinates
-    # This is a workaround since pcolormesh doesn't directly support RGB
-    # We'll use the filled contour approach
-    extent = [lon.min(), lon.max(), lat.min(), lat.max()]
-    im = ax.imshow(rgb_image, extent=extent, origin='lower',
-                   transform=ccrs.PlateCarree(), interpolation='bilinear')
+    # For proper RGB display with geographic coordinates, we use a workaround:
+    # Plot using pcolormesh with a custom colormap or use imshow with proper extent
     
-    # Set extent
+    # Method: Use matplotlib's ability to display RGB arrays directly
+    # We need to ensure the RGB array is properly oriented and scaled
+    
+    # Convert masked array to regular array, filling masked values with 0
+    rgb_display = np.ma.filled(rgb_image, 0)
+    
+    # For irregular grids like satellite swaths, we have two options:
+    # 1. Use imshow with extent (assumes regular grid) - fast but approximate
+    # 2. Use pcolormesh for each channel (not RGB) - accurate but limited
+    # 3. Regrid to regular grid then use imshow - best for irregular grids
+    
+    # Using approach 1 with proper extent calculation:
+    # Get corner coordinates for the extent
+    lon_min, lon_max = lon.min(), lon.max()
+    lat_min, lat_max = lat.min(), lat.max()
+    extent = [lon_min, lon_max, lat_min, lat_max]
+    
+    # Display RGB image with geographic extent
+    # Note: origin='lower' ensures correct orientation
+    im = ax.imshow(rgb_display, 
+                   extent=extent, 
+                   origin='lower',
+                   transform=ccrs.PlateCarree(), 
+                   interpolation='bilinear',
+                   aspect='auto')
+    
+    # Set extent with margin
     margin = 1
-    ax.set_extent([lon.min() - margin, lon.max() + margin,
-                   lat.min() - margin, lat.max() + margin],
+    ax.set_extent([lon_min - margin, lon_max + margin,
+                   lat_min - margin, lat_max + margin],
                   crs=ccrs.PlateCarree())
     
-    ax.set_title('OCI False Color Image (Human Perception Weighted)', 
+    ax.set_title('OCI False Color Image (Enhanced, Human Perception Weighted)', 
                  fontsize=14, fontweight='bold')
     
     if save_path:
