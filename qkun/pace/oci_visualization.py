@@ -321,7 +321,10 @@ def plot_false_color_image(nc_path: str, subsample: int = 5,
                            ax: Optional[plt.Axes] = None,
                            save_path: Optional[str] = None) -> plt.Figure:
     """
-    Plot the false color image on a map projection with proper RGB coordinate mapping.
+    Plot the false color image on a map projection with proper geographic coordinate mapping.
+    
+    Uses pcolormesh to properly map each pixel to its actual lat/lon coordinates,
+    preserving the tilted satellite swath geometry and displaying true RGB colors.
     
     Parameters:
     -----------
@@ -348,49 +351,64 @@ def plot_false_color_image(nc_path: str, subsample: int = 5,
     else:
         fig = ax.get_figure()
     
-    # Add map features
-    ax.add_feature(cfeature.LAND, facecolor='tan', edgecolor='none')
-    ax.add_feature(cfeature.OCEAN, facecolor='lightblue', alpha=0.3)
-    ax.add_feature(cfeature.COASTLINE, linewidth=1)
-    ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5, alpha=0.5)
-    ax.gridlines(draw_labels=True, linewidth=0.5, alpha=0.5)
-    
-    # Plot RGB image using pcolormesh for each channel separately, then composite
-    # This approach properly maps the irregular grid to geographic coordinates
-    
-    # For proper RGB display with geographic coordinates, we use a workaround:
-    # Plot using pcolormesh with a custom colormap or use imshow with proper extent
-    
-    # Method: Use matplotlib's ability to display RGB arrays directly
-    # We need to ensure the RGB array is properly oriented and scaled
+    # Add map features (with lower zorder so they appear behind the data)
+    ax.add_feature(cfeature.LAND, facecolor='tan', edgecolor='none', zorder=0)
+    ax.add_feature(cfeature.OCEAN, facecolor='lightblue', alpha=0.3, zorder=0)
+    ax.add_feature(cfeature.COASTLINE, linewidth=1, zorder=2)
+    ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5, alpha=0.5, zorder=2)
+    ax.gridlines(draw_labels=True, linewidth=0.5, alpha=0.5, zorder=3)
     
     # Convert masked array to regular array, filling masked values with 0
     rgb_display = np.ma.filled(rgb_image, 0)
     
-    # For irregular grids like satellite swaths, we have two options:
-    # 1. Use imshow with extent (assumes regular grid) - fast but approximate
-    # 2. Use pcolormesh for each channel (not RGB) - accurate but limited
-    # 3. Regrid to regular grid then use imshow - best for irregular grids
+    # Normalize RGB to 0-1 range for matplotlib
+    rgb_normalized = rgb_display.astype(float) / 255.0
     
-    # Using approach 1 with proper extent calculation:
-    # Get corner coordinates for the extent
-    lon_min, lon_max = lon.min(), lon.max()
-    lat_min, lat_max = lat.min(), lat.max()
-    extent = [lon_min, lon_max, lat_min, lat_max]
+    # For satellite swaths with tilted/irregular grids, we use pcolormesh
+    # pcolormesh requires a dummy scalar field, but we can set face colors directly
     
-    # Display RGB image with geographic extent
-    # Note: origin='lower' ensures correct orientation
-    im = ax.imshow(rgb_display, 
-                   extent=extent, 
-                   origin='lower',
-                   transform=ccrs.PlateCarree(), 
-                   interpolation='bilinear',
-                   aspect='auto')
+    # Create a dummy scalar field (all zeros)
+    dummy = np.zeros(rgb_normalized.shape[:2])
+    
+    # Plot with pcolormesh to get proper coordinate mapping
+    mesh = ax.pcolormesh(lon, lat, dummy,
+                         transform=ccrs.PlateCarree(),
+                         shading='auto',
+                         zorder=1)
+    
+    # Now set the facecolors to our RGB values
+    # pcolormesh creates quadrilaterals, so we need to flatten and set colors
+    # Get the number of faces (cells)
+    ny, nx = rgb_normalized.shape[:2]
+    n_cells = (ny - 1) * (nx - 1) if rgb_normalized.shape[:2] == lon.shape else ny * nx
+    
+    # Flatten RGB colors for each cell
+    # If shading='auto' or 'flat', we need (ny-1, nx-1) colors
+    # If shading='gouraud', we need (ny, nx) colors
+    # With 'auto' on quadrilateral mesh, it uses 'flat' style
+    
+    # For 'flat' shading, pcolormesh uses the average of corner values
+    # But we want to set explicit colors per cell
+    # So we'll use the center color for each cell
+    
+    # Reshape RGB to match the number of faces
+    if lon.shape == rgb_normalized.shape[:2]:
+        # Data and coordinates have same shape, use direct mapping
+        colors_flat = rgb_normalized.reshape(-1, 3)
+    else:
+        # Adjust if needed
+        colors_flat = rgb_normalized.reshape(-1, 3)
+    
+    # Set the face colors
+    # Don't call set_array(None) as it causes issues with cartopy
+    # Just set the facecolors directly
+    mesh.set_facecolor(colors_flat)
+    mesh.set_edgecolor('none')
     
     # Set extent with margin
     margin = 1
-    ax.set_extent([lon_min - margin, lon_max + margin,
-                   lat_min - margin, lat_max + margin],
+    ax.set_extent([lon.min() - margin, lon.max() + margin,
+                   lat.min() - margin, lat.max() + margin],
                   crs=ccrs.PlateCarree())
     
     ax.set_title('OCI False Color Image (Enhanced, Human Perception Weighted)', 
