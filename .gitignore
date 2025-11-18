@@ -5,3 +5,15 @@ qkun.egg-info/
 # example
 examples/*.yaml
 examples/*.txt
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Data files
+*.nc
+*.npz
+*.png
