@@ -228,11 +228,10 @@ def create_false_color_image(nc_path: str, subsample: int = 5,
     """
     Create a human-perceived false color image from OCI observation data.
     
-    This function selects appropriate wavelength bands for RGB channels to create
-    a natural-looking image where white surfaces (like clouds) appear white.
-    - Red channel: red band closest to 650 nm
-    - Green channel: blue band closest to 550 nm (from blue CCD)
-    - Blue channel: blue band closest to 450 nm
+    This function applies human perception weights to all available wavelength bands,
+    weighted by both human vision sensitivity and solar irradiance, to create RGB channels.
+    Uses the three-Gaussian model (S, M, L cone cells) to properly weight each band's
+    contribution to the final color image.
     
     Parameters:
     -----------
@@ -270,18 +269,44 @@ def create_false_color_image(nc_path: str, subsample: int = 5,
         lon = geo_group.variables['longitude'][::subsample, ::subsample]
         lat = geo_group.variables['latitude'][::subsample, ::subsample]
     
-    # Select appropriate bands for RGB channels for natural color
-    # Red channel: wavelength closest to 650 nm
-    red_idx = np.argmin(np.abs(red_wavelength - 650))
-    red_channel = rhot_red[red_idx, :, :]
+    # Combine all wavelengths and data
+    all_wavelengths = np.concatenate([blue_wavelength, red_wavelength])
+    all_irradiance = np.concatenate([blue_irradiance, red_irradiance])
     
-    # Green channel: wavelength closest to 550 nm (from blue CCD which goes up to 610 nm)
-    green_idx = np.argmin(np.abs(blue_wavelength - 550))
-    green_channel = rhot_blue[green_idx, :, :]
+    # Stack all bands together (blue_bands + red_bands, scans, pixels)
+    all_rhot = np.ma.concatenate([rhot_blue, rhot_red], axis=0)
     
-    # Blue channel: wavelength closest to 450 nm
-    blue_idx = np.argmin(np.abs(blue_wavelength - 450))
-    blue_channel = rhot_blue[blue_idx, :, :]
+    # Compute human perception weights for all wavelengths
+    human_weights = compute_human_perception_weights(all_wavelengths)
+    
+    # Define target wavelengths for RGB channels
+    red_target = 650.0    # Red channel centered at 650 nm
+    green_target = 545.0  # Green channel centered at 545 nm (M-cone peak)
+    blue_target = 445.0   # Blue channel centered at 445 nm (S-cone peak)
+    
+    # Compute weights for each RGB channel using Gaussians
+    sigma_rgb = 40.0  # Standard deviation for RGB channel selection
+    
+    # Red channel weights: Gaussian centered at red_target
+    red_weights = np.exp(-0.5 * ((all_wavelengths - red_target) / sigma_rgb) ** 2)
+    red_weights = red_weights * human_weights * all_irradiance
+    red_weights = red_weights / red_weights.sum() if red_weights.sum() > 0 else red_weights
+    
+    # Green channel weights: Gaussian centered at green_target
+    green_weights = np.exp(-0.5 * ((all_wavelengths - green_target) / sigma_rgb) ** 2)
+    green_weights = green_weights * human_weights * all_irradiance
+    green_weights = green_weights / green_weights.sum() if green_weights.sum() > 0 else green_weights
+    
+    # Blue channel weights: Gaussian centered at blue_target
+    blue_weights = np.exp(-0.5 * ((all_wavelengths - blue_target) / sigma_rgb) ** 2)
+    blue_weights = blue_weights * human_weights * all_irradiance
+    blue_weights = blue_weights / blue_weights.sum() if blue_weights.sum() > 0 else blue_weights
+    
+    # Apply weights to create RGB channels
+    # Reshape for broadcasting: weights shape (n_bands,), rhot shape (n_bands, scans, pixels)
+    red_channel = np.ma.sum(all_rhot * red_weights[:, np.newaxis, np.newaxis], axis=0)
+    green_channel = np.ma.sum(all_rhot * green_weights[:, np.newaxis, np.newaxis], axis=0)
+    blue_channel = np.ma.sum(all_rhot * blue_weights[:, np.newaxis, np.newaxis], axis=0)
     
     # Stack to create RGB image
     rgb_image = np.ma.stack([red_channel, green_channel, blue_channel], axis=-1)
